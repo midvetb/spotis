@@ -20,7 +20,6 @@ func Init(ctx context.Context) error {
 	}
 
 	b.RegisterHandler(bot.HandlerTypeMessageText, "start", bot.MatchTypeCommand, handlers.StartHandler)
-	b.RegisterHandler(bot.HandlerTypeMessageText, "get", bot.MatchTypeCommand, handlers.GetHandler)
 	b.Start(ctx)
 
 	return nil
