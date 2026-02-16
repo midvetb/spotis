@@ -48,17 +48,16 @@ func Decrypt(data, key []byte) ([]byte, error) {
 func DownloadTrack(ctx context.Context, session *Session, trackURL string, song *Song) (*bytes.Buffer, error) {
 	req, _ := http.NewRequestWithContext(ctx, "GET", trackURL, nil)
 
-	streamingClient := *session.HttpClient
-	streamingClient.Timeout = 0
+	streamingClient := *session.Client
 
-	resp, err := streamingClient.Do(req)
+	res, err := streamingClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer res.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("failed to download: status %d", resp.StatusCode)
+	if res.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("bad status: %d", res.StatusCode)
 	}
 
 	key := GetDecryptionKey(os.Getenv("DEEZER_SECRET"), song.ID)
@@ -74,7 +73,7 @@ func DownloadTrack(ctx context.Context, session *Session, trackURL string, song 
 		default:
 		}
 
-		n, err := io.ReadFull(resp.Body, buffer)
+		n, err := io.ReadFull(res.Body, buffer)
 		isEOF := false
 
 		if err != nil {
@@ -112,38 +111,30 @@ func DownloadTrack(ctx context.Context, session *Session, trackURL string, song 
 	return buf, nil
 }
 
-func DownloadTrackFromURL(ctx context.Context, trackURL string) (*bytes.Buffer, string, error) {
-	trackID := extractTrackID(trackURL)
-	if trackID == "" {
-		return nil, "", fmt.Errorf("invalid track URL")
-	}
+func DownloadTrackFromURL(ctx context.Context, url string) (*bytes.Buffer, error) {
+	trackID := extractTrackID(url)
 
 	session, err := Authenticate(ctx, os.Getenv("DEEZER_ARL"))
 	if err != nil {
-		return nil, "", fmt.Errorf("auth failed: %w", err)
+		return nil, err
 	}
 
 	song, err := FetchTrack(ctx, session, trackID)
 	if err != nil {
-		return nil, "", fmt.Errorf("fetch track failed: %w", err)
+		return nil, err
 	}
-
-	fmt.Printf("Downloading: %s - %s\n", song.Artist, song.Title)
 
 	media, err := FetchMediaURL(ctx, session, song, quality)
 	if err != nil {
-		return nil, "", fmt.Errorf("fetch media failed: %w", err)
+		return nil, err
 	}
-
-	fileName := fmt.Sprintf("%s - %s.mp3", song.Artist, song.Title)
 
 	buf, err := DownloadTrack(ctx, session, media.GetURL(), song)
 	if err != nil {
-		return nil, "", fmt.Errorf("download failed: %w", err)
+		return nil, err
 	}
 
-	fmt.Printf("✓ Downloaded to memory: %s\n", fileName)
-	return buf, fileName, nil
+	return buf, nil
 }
 
 func extractTrackID(url string) string {
@@ -152,5 +143,6 @@ func extractTrackID(url string) string {
 			return url[i+1:]
 		}
 	}
+
 	return ""
 }

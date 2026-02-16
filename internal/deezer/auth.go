@@ -25,41 +25,36 @@ type UserDataResponse struct {
 type Session struct {
 	APIToken     string
 	LicenseToken string
-	HttpClient   *http.Client
+	Client       *http.Client
 }
 
-func Authenticate(ctx context.Context, arlCookie string) (*Session, error) {
+const url = "https://www.deezer.com/ajax/gw-light.php?method=deezer.getUserData&input=3&api_version=1.0&api_token="
+
+func Authenticate(ctx context.Context, arl string) (*Session, error) {
 	jar, _ := cookiejar.New(nil)
-	client := &http.Client{
-		Timeout: 20 * time.Second,
-		Jar:     jar,
-	}
+	c := &http.Client{Timeout: 20 * time.Second, Jar: jar}
 
-	url := "https://www.deezer.com/ajax/gw-light.php?method=deezer.getUserData&input=3&api_version=1.0&api_token="
 	req, _ := http.NewRequestWithContext(ctx, "GET", url, nil)
-	req.AddCookie(&http.Cookie{
-		Name:  "arl",
-		Value: arlCookie,
-	})
+	req.AddCookie(&http.Cookie{Name: "arl", Value: arl})
 
-	resp, err := client.Do(req)
+	res, err := c.Do(req)
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer res.Body.Close()
 
-	body, _ := io.ReadAll(resp.Body)
+	body, _ := io.ReadAll(res.Body)
 
-	var res UserDataResponse
-	json.Unmarshal(body, &res)
+	var response UserDataResponse
+	json.Unmarshal(body, &response)
 
-	if res.Results.User.Id == 0 {
+	if response.Results.User.Id == 0 {
 		return nil, fmt.Errorf("invalid arl cookie")
 	}
 
 	return &Session{
-		APIToken:     res.Results.APIToken,
-		LicenseToken: res.Results.User.Options.LicenseToken,
-		HttpClient:   client,
+		APIToken:     response.Results.APIToken,
+		LicenseToken: response.Results.User.Options.LicenseToken,
+		Client:       c,
 	}, nil
 }

@@ -1,4 +1,4 @@
-package handlers
+package app
 
 import (
 	"context"
@@ -7,9 +7,12 @@ import (
 	"github.com/go-telegram/bot/models"
 )
 
-func StartHandler(ctx context.Context, b *bot.Bot, u *models.Update) {
+func CommandStart(ctx context.Context, b *bot.Bot, u *models.Update) {
 	b.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID: u.Message.Chat.ID,
 		Text:   "hello everynyan~",
+		ReplyParameters: &models.ReplyParameters{
+			MessageID: u.Message.ID,
+		},
 	})
 }

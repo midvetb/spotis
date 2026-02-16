@@ -1,15 +1,16 @@
-package handlers
+package app
 
 import (
+	"bytes"
 	"context"
+	"io"
+	"net/http"
 	"os"
 
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
 	"github.com/maya-florenko/spotis/internal/deezer"
 	"github.com/maya-florenko/spotis/internal/songlink"
-	"github.com/maya-florenko/spotis/internal/spotify"
-	spot "github.com/zmb3/spotify/v2"
 )
 
 func InlineHandler(ctx context.Context, b *bot.Bot, u *models.Update) {
@@ -17,12 +18,7 @@ func InlineHandler(ctx context.Context, b *bot.Bot, u *models.Update) {
 		return
 	}
 
-	res, err := spotify.Get(ctx, u.InlineQuery.Query)
-	if err != nil {
-		return
-	}
-
-	id, err := download(ctx, b, u.InlineQuery.Query, res)
+	id, err := download(ctx, b, u.InlineQuery.Query)
 	if err != nil {
 		return
 	}
@@ -41,13 +37,13 @@ func InlineHandler(ctx context.Context, b *bot.Bot, u *models.Update) {
 	})
 }
 
-func download(ctx context.Context, b *bot.Bot, url string, res *spot.FullTrack) (string, error) {
-	u, err := songlink.Link(ctx, url)
+func download(ctx context.Context, b *bot.Bot, url string) (string, error) {
+	res, err := songlink.GetLink(ctx, url)
 	if err != nil {
 		return "", err
 	}
 
-	file, name, err := deezer.DownloadTrackFromURL(ctx, u)
+	file, err := deezer.DownloadTrackFromURL(ctx, res.URL)
 	if err != nil {
 		return "", err
 	}
@@ -55,14 +51,46 @@ func download(ctx context.Context, b *bot.Bot, url string, res *spot.FullTrack) 
 	msg, err := b.SendAudio(ctx, &bot.SendAudioParams{
 		ChatID: os.Getenv("TELEGRAM_CHAT_ID"),
 		Audio: &models.InputFileUpload{
-			Filename: name,
+			Filename: res.Artist + " - " + res.Title,
 			Data:     file,
 		},
-		Title: res.Artists[0].Name + " - " + res.Name,
+		Title:     res.Artist + " - " + res.Title,
+		Thumbnail: cover(ctx, res.Cover),
 	})
 	if err != nil {
 		return "", err
 	}
 
 	return msg.Audio.FileID, err
+}
+
+func cover(ctx context.Context, url string) models.InputFile {
+	if url == "" {
+		return nil
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil
+	}
+
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil
+	}
+
+	return &models.InputFileUpload{
+		Filename: "cover.jpg",
+		Data:     bytes.NewReader(data),
+	}
 }
